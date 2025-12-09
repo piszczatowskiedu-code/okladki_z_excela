@@ -86,30 +86,6 @@ with col2:
     if st.button("🚀 Otwórz konwerter HTML", key="btn_html", type="primary"):
         st.switch_page("pages/2_zmiana_opisu_html.py")
 
-# Sekcja z szybkimi linkami
-st.markdown("---")
-st.markdown("### 🔗 Szybkie linki do narzędzi")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.page_link("pages/1_pobieranie_okladek.py", 
-                 label="📥 Pobieranie okładek", 
-                 icon="📥",
-                 use_container_width=True)
-
-with col2:
-    st.page_link("pages/2_zmiana_opisu_html.py", 
-                 label="📝 Konwerter HTML", 
-                 icon="📝",
-                 use_container_width=True)
-
-with col3:
-    st.info("🔜 Więcej narzędzi wkrótce...")
-
-with col4:
-    st.info("💡 Masz pomysł? Zgłoś!")
-
 # Instrukcja
 st.markdown("---")
 st.markdown("### 📖 Jak korzystać?")
