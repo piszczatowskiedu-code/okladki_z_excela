@@ -38,8 +38,32 @@ st.markdown("""
         margin: 1rem 0;
         font-family: monospace;
     }
+    /* Ciemniejszy placeholder w text area */
+    textarea::placeholder {
+        color: #e0e0e0 !important;
+        opacity: 0.4 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ============================================
+# FUNKCJE POMOCNICZE
+# ============================================
+
+def parse_ean_list(ean_text):
+    """Parsuje listę kodów EAN z tekstu"""
+    if not ean_text:
+        return set()
+    
+    ean_list = []
+    for line in ean_text.strip().split('\n'):
+        ean = line.strip()
+        if ean:
+            # Zachowuje zera wiodące ale usuwa spacje
+            ean = str(ean).strip().replace(' ', '')
+            ean_list.append(ean)
+    
+    return set(ean_list)
 
 # ============================================
 # FUNKCJE KONWERSJI TEKSTU NA HTML
@@ -159,6 +183,10 @@ def text_to_html(text: str, options: dict) -> str:
 # INTERFEJS UŻYTKOWNIKA
 # ============================================
 
+# Inicjalizacja session_state
+if 'conversion_results' not in st.session_state:
+    st.session_state.conversion_results = None
+
 # Nagłówek
 st.markdown("<div class='main-header'>📝 Konwerter opisów produktów na HTML</div>", unsafe_allow_html=True)
 st.markdown("---")
@@ -180,9 +208,10 @@ with st.sidebar:
     st.markdown("""
     1. Wgraj plik Excel z opisami
     2. Wybierz kolumny (EAN i opis)
-    3. Dostosuj opcje konwersji
-    4. Kliknij 'Konwertuj na HTML'
-    5. Pobierz wynikowy plik
+    3. Opcjonalnie: wklej listę EAN
+    4. Dostosuj opcje konwersji
+    5. Kliknij 'Konwertuj na HTML'
+    6. Pobierz wynikowy plik
     """)
     
     st.markdown("---")
@@ -193,6 +222,12 @@ with st.sidebar:
     - **Pogrubienie**: **tekst** lub __tekst__
     - **Kursywa**: *tekst* lub _tekst_
     """)
+    
+    if st.session_state.conversion_results:
+        st.markdown("---")
+        if st.button("🗑️ Wyczyść wyniki", type="secondary"):
+            st.session_state.conversion_results = None
+            st.rerun()
 
 # Główna część aplikacji
 st.header("📤 Wgraj plik Excel")
@@ -223,6 +258,12 @@ if uploaded_file is not None:
                 index=columns.index('EAN') if 'EAN' in columns else 0,
                 help="Wybierz kolumnę z kodami EAN (SKU)"
             )
+            
+            # Preview EAN - tylko 1 wartość
+            st.markdown("**Przykładowa wartość:**")
+            sample_ean = df[ean_column].dropna().head(1).tolist()
+            if sample_ean:
+                st.code(str(sample_ean[0]), language=None)
         
         with col2:
             # Szukaj kolumny z opisem
@@ -238,22 +279,67 @@ if uploaded_file is not None:
                 index=default_desc_index,
                 help="Wybierz kolumnę zawierającą opisy do konwersji"
             )
+            
+            # Preview opisu - tylko fragment
+            st.markdown("**Przykładowa wartość:**")
+            sample_desc = df[description_column].dropna().head(1).tolist()
+            if sample_desc:
+                desc_preview = str(sample_desc[0])[:100] + "..." if len(str(sample_desc[0])) > 100 else str(sample_desc[0])
+                st.code(desc_preview, language=None)
+        
+        # Sekcja filtrowania EAN
+        st.markdown("---")
+        st.markdown("### 🔍 Filtrowanie po kodach EAN (opcjonalne)")
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            ean_filter_text = st.text_area(
+                "Wklej kody EAN do konwersji (jeden kod na linię)",
+                height=150,
+                placeholder="5901234567890\n5907654321098\n9788374959216",
+                help="Jeśli wpiszesz kody EAN, tylko opisy tych produktów zostaną skonwertowane. Zostaw puste aby skonwertować wszystkie."
+            )
+        
+        with col2:
+            if ean_filter_text:
+                ean_filter_set = parse_ean_list(ean_filter_text)
+                st.info(f"📝 Wprowadzono kodów: **{len(ean_filter_set)}**")
+                
+                # Sprawdź ile z nich istnieje w pliku
+                df_eans = set(df[ean_column].dropna().astype(str))
+                matching = sum(1 for ean in ean_filter_set if ean in df_eans)
+                st.success(f"✅ Znaleziono w pliku: **{matching}**")
+                
+                if matching == 0:
+                    st.warning("⚠️ Żaden z podanych kodów nie został znaleziony!")
+            else:
+                st.info("🔓 Filtr nieaktywny\n\nSkonwertowane zostaną wszystkie produkty")
         
         # Podgląd danych wejściowych
+        st.markdown("---")
         st.markdown("### 👁️ Podgląd danych wejściowych")
-        preview_df = df[[ean_column, description_column]].head(3)
-        st.dataframe(preview_df, use_container_width=True)
+        
+        # Jeśli jest filtr, pokaż przefiltrowane dane
+        preview_df = df[[ean_column, description_column]].copy()
+        if ean_filter_text:
+            ean_filter_set = parse_ean_list(ean_filter_text)
+            preview_df = preview_df[preview_df[ean_column].isin(ean_filter_set)]
+            if not preview_df.empty:
+                st.info(f"Pokazuję {min(3, len(preview_df))} z {len(preview_df)} przefiltrowanych produktów")
+        
+        st.dataframe(preview_df.head(3), use_container_width=True)
         
         # Przykład konwersji
-        if not df.empty and not pd.isna(df[description_column].iloc[0]):
+        if not preview_df.empty and not pd.isna(preview_df[description_column].iloc[0]):
             with st.expander("🔍 Podgląd konwersji pierwszego opisu"):
-                sample_text = str(df[description_column].iloc[0])
+                sample_text = str(preview_df[description_column].iloc[0])
                 sample_html = text_to_html(sample_text, options)
                 
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("**Tekst oryginalny:**")
-                    st.text_area("", sample_text, height=200, disabled=True)
+                    st.text_area("", sample_text, height=200, disabled=True, key="preview_text")
                 
                 with col2:
                     st.markdown("**HTML wynikowy:**")
@@ -265,34 +351,74 @@ if uploaded_file is not None:
         with col2:
             if st.button("🚀 KONWERTUJ NA HTML", type="primary", use_container_width=True):
                 with st.spinner("Konwertuję opisy..."):
+                    # Przygotuj dane do konwersji
+                    working_df = df.copy()
+                    found_eans = set()
+                    missing_eans = None
+                    
+                    # Zastosuj filtr EAN jeśli podany
+                    if ean_filter_text:
+                        ean_filter_set = parse_ean_list(ean_filter_text)
+                        working_df = working_df[working_df[ean_column].isin(ean_filter_set)]
+                        found_eans = set(working_df[ean_column].dropna())
+                        missing_eans = ean_filter_set - found_eans
+                    
                     # Tworzenie DataFrame wynikowego
                     export_df = pd.DataFrame({
-                        'sku': df[ean_column].fillna(''),
-                        'description-B2B': df[description_column].apply(
+                        'sku': working_df[ean_column].fillna(''),
+                        'description-B2B': working_df[description_column].apply(
                             lambda x: text_to_html(x, options)
                         )
                     })
                     
-                    st.session_state['export_df'] = export_df
+                    # Zapisz wyniki w session_state
+                    st.session_state.conversion_results = {
+                        'export_df': export_df,
+                        'ean_filter_set': ean_filter_set if ean_filter_text else None,
+                        'missing_eans': missing_eans,
+                        'total_in_file': len(df),
+                        'filename': uploaded_file.name
+                    }
+                    
                     st.success("✅ Konwersja zakończona!")
         
         # Wyświetl wyniki
-        if 'export_df' in st.session_state:
+        if st.session_state.conversion_results:
+            results = st.session_state.conversion_results
+            export_df = results['export_df']
+            ean_filter_set = results['ean_filter_set']
+            missing_eans = results['missing_eans']
+            total_in_file = results['total_in_file']
+            
             st.markdown("---")
             st.header("📊 Wyniki konwersji")
             
-            export_df = st.session_state['export_df']
-            
             # Statystyki
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Liczba produktów", len(export_df))
+                st.metric("Produktów w pliku", total_in_file)
             with col2:
-                converted = sum(1 for x in export_df['description-B2B'] if x)
-                st.metric("Skonwertowane opisy", converted)
+                st.metric("Skonwertowano", len(export_df))
             with col3:
+                converted = sum(1 for x in export_df['description-B2B'] if x)
+                st.metric("Z opisami HTML", converted)
+            with col4:
                 empty = len(export_df) - converted
                 st.metric("Puste opisy", empty)
+            
+            # Raport brakujących EAN
+            if missing_eans:
+                st.markdown("---")
+                st.markdown("### ⚠️ Kody EAN nieznalezione w pliku Excel")
+                st.warning(f"Następujące kody EAN nie zostały znalezione ({len(missing_eans)} kodów):")
+                
+                missing_eans_text = '\n'.join(sorted(list(missing_eans)))
+                st.text_area(
+                    "Lista brakujących kodów EAN:",
+                    value=missing_eans_text,
+                    height=200,
+                    help="Możesz skopiować tę listę i przekazać do uzupełnienia"
+                )
             
             # Podgląd wyników
             st.markdown("### 📋 Podgląd wyników (pierwsze 10)")
@@ -302,6 +428,14 @@ if uploaded_file is not None:
                 lambda x: x[:200] + '...' if len(x) > 200 else x
             )
             st.dataframe(display_df, use_container_width=True)
+            
+            # Lista wszystkich przetworzonych EAN
+            with st.expander(f"📋 Lista przetworzonych produktów ({len(export_df)})"):
+                ean_list = export_df['sku'].tolist()
+                for i, ean in enumerate(ean_list[:100], 1):  # Pokazuj max 100
+                    st.text(f"{i}. {ean}")
+                if len(ean_list) > 100:
+                    st.text(f"... i {len(ean_list) - 100} więcej")
             
             # Pobieranie
             st.markdown("---")
@@ -336,13 +470,16 @@ if uploaded_file is not None:
             output.seek(0)
             
             # Nazwa pliku
-            original_name = uploaded_file.name.rsplit('.', 1)[0]
-            output_filename = f"{original_name}_HTML.xlsx"
+            original_name = results['filename'].rsplit('.', 1)[0]
+            if ean_filter_set:
+                output_filename = f"{original_name}_HTML_filtered.xlsx"
+            else:
+                output_filename = f"{original_name}_HTML.xlsx"
             
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 st.download_button(
-                    label="⬇️ POBIERZ EXCEL Z HTML",
+                    label=f"⬇️ POBIERZ EXCEL Z HTML ({len(export_df)} produktów)",
                     data=output,
                     file_name=output_filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -350,12 +487,10 @@ if uploaded_file is not None:
                     type="primary"
                 )
             
-            st.info(f"📁 Plik **{output_filename}** zawiera **{len(export_df)}** wierszy z przekonwertowanymi opisami HTML.")
-            
-            # Opcja czyszczenia
-            if st.button("🗑️ Wyczyść wyniki", type="secondary"):
-                del st.session_state['export_df']
-                st.rerun()
+            if ean_filter_set:
+                st.info(f"📁 Plik **{output_filename}** zawiera **{len(export_df)}** przefiltrowanych produktów z przekonwertowanymi opisami HTML.")
+            else:
+                st.info(f"📁 Plik **{output_filename}** zawiera **{len(export_df)}** produktów z przekonwertowanymi opisami HTML.")
                     
     except Exception as e:
         st.error(f"❌ Błąd podczas przetwarzania pliku: {str(e)}")
