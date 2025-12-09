@@ -42,13 +42,6 @@ st.markdown("""
 st.markdown("<div class='main-header'>🛠️ Narzędzia Excel</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Wprowadzenie
-st.markdown("""
-### Witaj w zestawie narzędzi do przetwarzania plików Excel!
-
-Wybierz narzędzie poniżej lub z menu bocznego, aby rozpocząć.
-""")
-
 # Karty z narzędziami - teraz jako klikalne elementy
 col1, col2 = st.columns(2)
 
@@ -86,31 +79,8 @@ with col2:
     if st.button("🚀 Otwórz konwerter HTML", key="btn_html", type="primary"):
         st.switch_page("pages/2_zmiana_opisu_html.py")
 
-# Instrukcja
-st.markdown("---")
-st.markdown("### 📖 Jak korzystać?")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.info("""
-    **Krok 1:**  
-    Kliknij przycisk przy wybranym narzędziu lub wybierz z menu bocznego
-    """)
-
-with col2:
-    st.info("""
-    **Krok 2:**  
-    Wgraj plik Excel z danymi
-    """)
-
-with col3:
-    st.info("""
-    **Krok 3:**  
-    Skonfiguruj opcje i uruchom przetwarzanie
-    """)
-
 # Informacje dodatkowe
+st.markdown("---")
 with st.expander("ℹ️ Informacje o aplikacji"):
     st.markdown("""
     ### Wymagania dla plików Excel:
