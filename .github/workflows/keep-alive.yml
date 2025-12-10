@@ -14,27 +14,27 @@ jobs:
       - name: Check Secret
         run: |
           if [ -z "${{ secrets.STREAMLIT_APP_URL }}" ]; then
-            echo "❌ ERROR: STREAMLIT_APP_URL secret is not configured!"
+            echo "ERROR: STREAMLIT_APP_URL secret is not configured!"
             echo "Please add it in Settings → Secrets and variables → Actions"
             exit 1
           else
-            echo "✅ Secret STREAMLIT_APP_URL is configured"
+            echo "Secret STREAMLIT_APP_URL is configured"
           fi
           
       - name: Ping Streamlit App
         run: |
           APP_URL="${{ secrets.STREAMLIT_APP_URL }}"
           
-          echo "🔄 Attempting to wake up Streamlit app..."
-          echo "⏰ Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Attempting to wake up Streamlit app..."
+          echo "Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
           echo ""
           
           # Pierwszy ping - może trwać długo jeśli app śpi (timeout 90 sekund)
           echo "First ping (wake-up call)..."
           if curl -s -o /dev/null -w "HTTP Status: %{http_code} | Response Time: %{time_total}s\n" --max-time 90 "$APP_URL"; then
-            echo "✅ First ping completed!"
+            echo "First ping completed!"
           else
-            echo "⚠️ First ping failed or timed out (app might be sleeping)"
+            echo "First ping failed or timed out (app might be sleeping)"
           fi
           
           # Czekaj 10 sekund
@@ -50,13 +50,13 @@ jobs:
           echo "HTTP Status Code: $HTTP_CODE"
           
           if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ SUCCESS! App is active and responding!"
+            echo "SUCCESS! App is active and responding!"
           elif [ "$HTTP_CODE" -eq 301 ] || [ "$HTTP_CODE" -eq 302 ] || [ "$HTTP_CODE" -eq 307 ] || [ "$HTTP_CODE" -eq 308 ]; then
-            echo "✅ SUCCESS! App is redirecting (normal for Streamlit)"
+            echo "SUCCESS! App is redirecting (normal for Streamlit)"
           elif [ "$HTTP_CODE" -eq 000 ]; then
-            echo "⚠️ Connection timeout or failed"
+            echo "Connection timeout or failed"
           else
-            echo "⚠️ Unexpected status code: $HTTP_CODE"
+            echo "Unexpected status code: $HTTP_CODE"
           fi
           
           # Trzeci ping - opcjonalny, dla pewności
@@ -72,19 +72,19 @@ jobs:
           
           if [ "$FINAL_CODE" -eq 200 ] || [ "$FINAL_CODE" -eq 301 ] || [ "$FINAL_CODE" -eq 302 ]; then
             echo ""
-            echo "✅✅✅ App successfully awakened and responding! ✅✅✅"
+            echo "App successfully awakened and responding!"
           else
             echo ""
-            echo "⚠️ App may need more time to wake up, but that's normal."
+            echo "App may need more time to wake up, but that's normal."
             echo "It will be fully active for users now."
           fi
           
       - name: Create Summary Report
         if: always()
         run: |
-          echo "## 📊 Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔄 Ping Results:" >> $GITHUB_STEP_SUMMARY
+          echo "### Ping Results:" >> $GITHUB_STEP_SUMMARY
           echo "- **Status:** Job completed" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "- **Target:** Streamlit App" >> $GITHUB_STEP_SUMMARY
