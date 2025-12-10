@@ -2,8 +2,9 @@ name: Keep Streamlit App Alive
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Co 6 godzin
-  workflow_dispatch:  # Możliwość ręcznego uruchomienia
+    # Poniedziałek-Piątek o 7:00 UTC
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
 
 jobs:
   ping-app:
