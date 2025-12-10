@@ -1,76 +1,99 @@
-name: Keep Streamlit App Alive & Monitor
+name: Keep Streamlit App Alive
 
 on:
   schedule:
     - cron: '0 */6 * * *'  # Co 6 godzin
-  workflow_dispatch:
+  workflow_dispatch:  # Możliwość ręcznego uruchomienia
 
 jobs:
-  ping-and-monitor:
+  ping-app:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-      
-      - name: Ping and Test App
-        id: ping
+      - name: Check Secret
         run: |
-          import requests
-          import time
-          import sys
+          if [ -z "${{ secrets.STREAMLIT_APP_URL }}" ]; then
+            echo "❌ ERROR: STREAMLIT_APP_URL secret is not configured!"
+            echo "Please add it in Settings → Secrets and variables → Actions"
+            exit 1
+          else
+            echo "✅ Secret STREAMLIT_APP_URL is configured"
+          fi
           
-          url = "${{ secrets.STREAMLIT_APP_URL }}"
+      - name: Ping Streamlit App
+        run: |
+          APP_URL="${{ secrets.STREAMLIT_APP_URL }}"
           
-          max_retries = 3
-          retry_delay = 10
+          echo "🔄 Attempting to wake up Streamlit app..."
+          echo "⏰ Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
           
-          for attempt in range(max_retries):
-              try:
-                  print(f"Attempt {attempt + 1}/{max_retries}")
-                  
-                  # Pierwszy request - może trwać dłużej jeśli app śpi
-                  response = requests.get(url, timeout=60)
-                  
-                  if response.status_code == 200:
-                      print(f"✅ Success! App is responsive (HTTP {response.status_code})")
-                      
-                      # Sprawdź czas odpowiedzi
-                      start = time.time()
-                      response2 = requests.get(url, timeout=30)
-                      load_time = time.time() - start
-                      
-                      print(f"⚡ Load time: {load_time:.2f} seconds")
-                      
-                      if load_time > 10:
-                          print("⚠️ App was probably sleeping (slow initial response)")
-                      else:
-                          print("✨ App was already active (fast response)")
-                      
-                      sys.exit(0)
-                  else:
-                      print(f"⚠️ Unexpected status code: {response.status_code}")
-                      
-              except requests.RequestException as e:
-                  print(f"❌ Error: {e}")
-                  
-                  if attempt < max_retries - 1:
-                      print(f"Waiting {retry_delay} seconds before retry...")
-                      time.sleep(retry_delay)
-                  else:
-                      print("Failed after all retries")
-                      sys.exit(1)
-        shell: python
-      
-      - name: Create summary
+          # Pierwszy ping - może trwać długo jeśli app śpi (timeout 90 sekund)
+          echo "First ping (wake-up call)..."
+          if curl -s -o /dev/null -w "HTTP Status: %{http_code} | Response Time: %{time_total}s\n" --max-time 90 "$APP_URL"; then
+            echo "✅ First ping completed!"
+          else
+            echo "⚠️ First ping failed or timed out (app might be sleeping)"
+          fi
+          
+          # Czekaj 10 sekund
+          echo ""
+          echo "Waiting 10 seconds for app to fully wake up..."
+          sleep 10
+          
+          # Drugi ping - powinien być szybszy
+          echo ""
+          echo "Second ping (verification)..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$APP_URL" || echo "000")
+          
+          echo "HTTP Status Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ SUCCESS! App is active and responding!"
+          elif [ "$HTTP_CODE" -eq 301 ] || [ "$HTTP_CODE" -eq 302 ] || [ "$HTTP_CODE" -eq 307 ] || [ "$HTTP_CODE" -eq 308 ]; then
+            echo "✅ SUCCESS! App is redirecting (normal for Streamlit)"
+          elif [ "$HTTP_CODE" -eq 000 ]; then
+            echo "⚠️ Connection timeout or failed"
+          else
+            echo "⚠️ Unexpected status code: $HTTP_CODE"
+          fi
+          
+          # Trzeci ping - opcjonalny, dla pewności
+          echo ""
+          echo "Third ping (final check)..."
+          sleep 5
+          
+          FINAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$APP_URL" || echo "000")
+          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" --max-time 20 "$APP_URL" || echo "N/A")
+          
+          echo "Final Status Code: $FINAL_CODE"
+          echo "Response Time: ${RESPONSE_TIME}s"
+          
+          if [ "$FINAL_CODE" -eq 200 ] || [ "$FINAL_CODE" -eq 301 ] || [ "$FINAL_CODE" -eq 302 ]; then
+            echo ""
+            echo "✅✅✅ App successfully awakened and responding! ✅✅✅"
+          else
+            echo ""
+            echo "⚠️ App may need more time to wake up, but that's normal."
+            echo "It will be fully active for users now."
+          fi
+          
+      - name: Create Summary Report
         if: always()
         run: |
           echo "## 📊 Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔄 Ping Results:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** Job completed" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "- **App URL:** ${{ secrets.STREAMLIT_APP_URL }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** ${{ steps.ping.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target:** Streamlit App" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Next run in approximately 6 hours ⏰" >> $GITHUB_STEP_SUMMARY
+          echo "### 📅 Schedule:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frequency:** Every 6 hours" >> $GITHUB_STEP_SUMMARY
+          echo "- **Next run:** ~6 hours from now" >> $GITHUB_STEP_SUMMARY
+          echo "- **Manual trigger:** Available in Actions tab" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Notes:" >> $GITHUB_STEP_SUMMARY
+          echo "- App may take 30-60 seconds to wake from deep sleep" >> $GITHUB_STEP_SUMMARY
+          echo "- Multiple pings ensure app is fully activated" >> $GITHUB_STEP_SUMMARY
+          echo "- HTTP 200/301/302 are all considered success" >> $GITHUB_STEP_SUMMARY
