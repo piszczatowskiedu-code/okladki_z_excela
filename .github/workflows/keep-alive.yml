@@ -88,13 +88,3 @@ jobs:
           echo "- **Status:** Job completed" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "- **Target:** Streamlit App" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📅 Schedule:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Frequency:** Every 6 hours" >> $GITHUB_STEP_SUMMARY
-          echo "- **Next run:** ~6 hours from now" >> $GITHUB_STEP_SUMMARY
-          echo "- **Manual trigger:** Available in Actions tab" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📝 Notes:" >> $GITHUB_STEP_SUMMARY
-          echo "- App may take 30-60 seconds to wake from deep sleep" >> $GITHUB_STEP_SUMMARY
-          echo "- Multiple pings ensure app is fully activated" >> $GITHUB_STEP_SUMMARY
-          echo "- HTTP 200/301/302 are all considered success" >> $GITHUB_STEP_SUMMARY
