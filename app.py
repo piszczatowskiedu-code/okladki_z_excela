@@ -1,4 +1,15 @@
 import streamlit as st
+from st_pages import Page, show_pages
+
+# Konfiguracja stron
+show_pages(
+    [
+        Page("app.py", "Strona główna"),
+        Page("pages/1_pobieranie_okladek.py", "Pobieranie okładek"),
+        Page("pages/2_zmiana_opisu_html.py", "Konwerter HTML"),
+        Page("pages/3_konwerter_webp.py", "Konwerter obrazów"),
+    ]
+)
 
 # Konfiguracja strony głównej
 st.set_page_config(
