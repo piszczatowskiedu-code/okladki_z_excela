@@ -11,15 +11,6 @@ st.set_page_config(
 # CSS dla lepszego wyglądu
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        background: linear-gradient(90deg, #1f77b4, #ff7f0e);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
     .tool-card {
         padding: 1.5rem;
         border-radius: 10px;
@@ -39,9 +30,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Nagłówek
-st.markdown("<div class='main-header'>🛠️ Narzędzia Excel & Grafika</div>", unsafe_allow_html=True)
-st.markdown("---")
 
 # Pierwszy rząd - 2 kolumny
 col1, col2 = st.columns(2)
