@@ -2,8 +2,8 @@ name: Keep Streamlit App Alive
 
 on:
   schedule:
-    # Poniedziałek-Piątek o 7:00 UTC
-    - cron: '0 7 * * 1-5'
+    # Poniedziałek-Piątek o 5:30 UTC (Polska zima: 6:30, Polska lato: 7:30)
+    - cron: '30 5 * * 1-5'
   workflow_dispatch:
 
 jobs:
