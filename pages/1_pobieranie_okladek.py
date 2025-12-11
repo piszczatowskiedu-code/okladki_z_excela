@@ -30,7 +30,6 @@ st.markdown("""
         text-align: center;
         margin-bottom: 1rem;
     }
-    /* Ciemniejszy placeholder w text area */
     textarea::placeholder {
         color: #e0e0e0 !important;
         opacity: 0.4 !important;
@@ -39,20 +38,86 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # STAŁE KONFIGURACYJNE
-DELAY_BETWEEN_DOWNLOADS = 1.0  # sekund między pobraniami
-TIMEOUT = 30  # timeout dla requestów w sekundach
+DELAY_BETWEEN_DOWNLOADS = 1.0
+TIMEOUT = 30
 ALLOWED_FORMATS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
-DEFAULT_FORMAT = '.jpg'  # domyślny format gdy nieznany
+DEFAULT_FORMAT = '.jpg'
 
-def convert_webp_to_png(image_bytes):
-    """Konwertuje obraz WebP na PNG"""
+def has_transparency(image):
+    """Sprawdza czy obraz ma przezroczystość"""
+    if image.mode in ('RGBA', 'LA'):
+        # Sprawdź czy faktycznie używa przezroczystości
+        if image.mode == 'RGBA':
+            alpha = image.split()[-1]
+            if alpha.getextrema() != (255, 255):
+                return True
+        elif image.mode == 'LA':
+            alpha = image.split()[-1]
+            if alpha.getextrema() != (255, 255):
+                return True
+    elif image.mode == 'P':
+        # Sprawdź czy paleta ma przezroczystość
+        if 'transparency' in image.info:
+            return True
+    return False
+
+def add_white_background(image_bytes, background_color=(255, 255, 255)):
+    """Dodaje tło do obrazu z przezroczystością"""
     try:
         image = Image.open(io.BytesIO(image_bytes))
-        # Konwersja RGBA na RGB jeśli potrzeba
-        if image.mode in ('RGBA', 'LA'):
-            background = Image.new('RGB', image.size, (255, 255, 255))
+        
+        # Sprawdź czy obraz ma przezroczystość
+        if not has_transparency(image):
+            # Obraz nie ma przezroczystości, zwróć oryginalny
+            return image_bytes
+        
+        # Konwertuj do RGBA jeśli potrzeba
+        if image.mode != 'RGBA':
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            elif image.mode == 'LA':
+                image = image.convert('RGBA')
+        
+        # Utwórz białe tło
+        background = Image.new('RGBA', image.size, background_color + (255,))
+        
+        # Złącz obraz z tłem
+        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+        
+        # Konwertuj do RGB (usuń kanał alpha)
+        final_image = background.convert('RGB')
+        
+        # Zapisz do bytes
+        output = io.BytesIO()
+        # Zachowaj format oryginalny jeśli to możliwe
+        format_to_save = 'JPEG' if image.format in ['JPEG', 'JPG'] else 'PNG'
+        final_image.save(output, format=format_to_save, quality=95, optimize=True)
+        return output.getvalue()
+        
+    except Exception as e:
+        # W razie błędu zwróć oryginalny obraz
+        return image_bytes
+
+def convert_webp_to_png(image_bytes, remove_transparency=False, background_color=(255, 255, 255)):
+    """Konwertuje obraz WebP na PNG z opcjonalnym usunięciem przezroczystości"""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # Jeśli ma usunąć przezroczystość i obraz ją ma
+        if remove_transparency and has_transparency(image):
+            if image.mode != 'RGBA':
+                image = image.convert('RGBA')
+            
+            background = Image.new('RGB', image.size, background_color)
             background.paste(image, mask=image.split()[-1])
             image = background
+        elif image.mode in ('RGBA', 'LA'):
+            # Zachowaj przezroczystość ale konwertuj format
+            pass
+        else:
+            # Konwertuj do RGB jeśli nie ma przezroczystości
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
         
         output = io.BytesIO()
         image.save(output, format='PNG', optimize=True)
@@ -87,7 +152,6 @@ def parse_ean_list(ean_text):
     for line in ean_text.strip().split('\n'):
         ean = line.strip()
         if ean:
-            # Próba konwersji EAN jak w głównym kodzie
             try:
                 ean = str(int(float(ean))).strip()
             except (ValueError, OverflowError):
@@ -95,6 +159,11 @@ def parse_ean_list(ean_text):
             ean_list.append(ean)
     
     return set(ean_list)
+
+def get_color_from_hex(hex_color):
+    """Konwertuje kolor HEX na tuple RGB"""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
 # Inicjalizacja session_state
 if 'download_results' not in st.session_state:
@@ -108,7 +177,41 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ Ustawienia")
     
-    # Sekcja konwersji
+    # Sekcja przezroczystości
+    st.markdown("### 🎨 Obsługa przezroczystości")
+    
+    handle_transparency = st.checkbox(
+        "Dodaj tło do przezroczystych obrazów",
+        value=True,
+        help="Automatycznie wykrywa obrazy z przezroczystym tłem i dodaje wybrane tło"
+    )
+    
+    if handle_transparency:
+        bg_option = st.radio(
+            "Kolor tła:",
+            ["Białe", "Czarne", "Szare", "Własny"],
+            index=0
+        )
+        
+        if bg_option == "Białe":
+            background_color = (255, 255, 255)
+        elif bg_option == "Czarne":
+            background_color = (0, 0, 0)
+        elif bg_option == "Szare":
+            background_color = (128, 128, 128)
+        else:
+            custom_color = st.color_picker(
+                "Wybierz kolor:",
+                value="#FFFFFF"
+            )
+            background_color = get_color_from_hex(custom_color)
+            st.info(f"RGB: {background_color}")
+    
+    st.markdown("---")
+    
+    # Sekcja konwersji WebP
+    st.markdown("### 🔄 Konwersja formatów")
+    
     convert_webp = st.checkbox(
         "Konwertuj .webp na .png",
         value=True,
@@ -116,6 +219,9 @@ with st.sidebar:
     )
     
     # Sekcja plików
+    st.markdown("---")
+    st.markdown("### 📁 Opcje plików")
+    
     overwrite = st.checkbox(
         "Nadpisuj istniejące pliki",
         value=False,
@@ -123,18 +229,21 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.markdown("### 📋 Instrukcja")
-    st.markdown("""
-    1. Wgraj plik Excel
-    2. Wybierz kolumny z danymi
-    3. Opcjonalnie: wklej listę EAN do pobrania
-    4. Kliknij 'Pobierz okładki'
-    5. Pobierz archiwum ZIP
-    """)
-    
-    st.markdown("---")
     st.markdown("### ℹ️ Informacje")
-    st.info("Aplikacja automatycznie pomija puste wiersze, pliki PDF i nieprawidłowe linki.")
+    
+    with st.expander("📋 Funkcje"):
+        st.markdown("""
+        **Obsługa przezroczystości:**
+        - ✅ Automatyczne wykrywanie
+        - ✅ Dodawanie tła
+        - ✅ Wybór koloru tła
+        - ✅ Zachowanie jakości
+        
+        **Pomijane:**
+        - ❌ Puste wiersze
+        - ❌ Pliki PDF
+        - ❌ Nieprawidłowe linki
+        """)
     
     if st.session_state.download_results:
         st.markdown("---")
@@ -151,7 +260,6 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     try:
-        # Wczytanie pliku
         with st.spinner("Wczytywanie pliku..."):
             df = pd.read_excel(uploaded_file)
         
@@ -170,12 +278,10 @@ if uploaded_file is not None:
                 help="Wybierz kolumnę zawierającą unikalne kody EAN"
             )
             
-            # Preview EAN - tylko 1 wartość
             st.markdown("**Przykładowa wartość:**")
             sample_ean = df[ean_column].dropna().head(1).tolist()
             if sample_ean:
                 ean_value = sample_ean[0]
-                # Konwersja EAN bez .0
                 try:
                     ean_value = str(int(float(ean_value)))
                 except (ValueError, OverflowError):
@@ -190,7 +296,6 @@ if uploaded_file is not None:
                 help="Wybierz kolumnę zawierającą URL do obrazów"
             )
             
-            # Preview links - tylko 1 wartość
             st.markdown("**Przykładowa wartość:**")
             sample_links = df[link_column].dropna().head(1).tolist()
             if sample_links:
@@ -215,7 +320,6 @@ if uploaded_file is not None:
                 ean_filter_set = parse_ean_list(ean_filter_text)
                 st.info(f"📝 Wprowadzono kodów: **{len(ean_filter_set)}**")
                 
-                # Sprawdź ile z nich istnieje w pliku
                 df_eans = df[ean_column].dropna().apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
                 matching = sum(1 for ean in df_eans if ean in ean_filter_set)
                 st.success(f"✅ Znaleziono w pliku: **{matching}**")
@@ -238,12 +342,9 @@ if uploaded_file is not None:
             )
         
         if start_download:
-            # Słownik na pliki w pamięci
             downloaded_files = {}
-            
-            # Przygotuj zestaw EAN do filtrowania
             ean_filter_set = parse_ean_list(ean_filter_text) if ean_filter_text else None
-            found_eans = set()  # Zbiór znalezionych EAN
+            found_eans = set()
             
             # Statystyki
             stats = {
@@ -251,19 +352,19 @@ if uploaded_file is not None:
                 'blad': 0,
                 'istnieje': 0,  
                 'konwersje': 0,
+                'transparency_fixed': 0,  # Nowa statystyka
                 'nieznalezione_ean': 0,
                 'pdf_pominięte': 0,
                 'puste_wiersze': 0
             }
             
             errors_log = []
-            pdf_eans = []  # Lista EAN z linkami PDF
+            pdf_eans = []
+            transparency_processed = []  # Lista EAN z usuniętą przezroczystością
             
-            # Progress
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Logi - tylko błędy
             log_expander = st.expander("⚠️ Błędy i ostrzeżenia", expanded=False)
             log_container = log_expander.container()
             
@@ -286,7 +387,6 @@ if uploaded_file is not None:
                 except (ValueError, OverflowError):
                     ean = str(ean).strip().replace(' ', '')
                 
-                # Sprawdź czy EAN jest na liście filtrów
                 if ean_filter_set:
                     if ean not in ean_filter_set:
                         stats['nieznalezione_ean'] += 1
@@ -294,7 +394,6 @@ if uploaded_file is not None:
                     else:
                         found_eans.add(ean)
                 
-                # Sprawdź czy link prowadzi do pliku PDF
                 link_lower = str(link).lower()
                 if '.pdf' in link_lower:
                     with log_container:
@@ -318,20 +417,44 @@ if uploaded_file is not None:
                         extension = DEFAULT_FORMAT
                     
                     original_extension = extension
-                    if convert_webp and extension == '.webp':
+                    
+                    # Pobierz obraz
+                    image_data = pobierz_obraz(link)
+                    
+                    # Obsługa przezroczystości (przed konwersją WebP)
+                    if handle_transparency and extension != '.webp':
+                        original_size = len(image_data)
+                        processed_data = add_white_background(image_data, background_color)
+                        
+                        # Sprawdź czy obraz został przetworzony
+                        if len(processed_data) != original_size or processed_data != image_data:
+                            image_data = processed_data
+                            stats['transparency_fixed'] += 1
+                            transparency_processed.append(ean)
+                    
+                    # Konwersja WebP
+                    if convert_webp and original_extension == '.webp':
+                        image_data = convert_webp_to_png(
+                            image_data, 
+                            remove_transparency=handle_transparency,
+                            background_color=background_color
+                        )
                         extension = '.png'
+                        stats['konwersje'] += 1
+                        
+                        # Jeśli WebP miał przezroczystość i została usunięta
+                        if handle_transparency:
+                            # Sprawdź czy obraz miał przezroczystość
+                            temp_img = Image.open(io.BytesIO(pobierz_obraz(link)))
+                            if has_transparency(temp_img):
+                                stats['transparency_fixed'] += 1
+                                transparency_processed.append(ean)
                     
                     filename = f"{ean}{extension}"
                     
                     if filename in downloaded_files and not overwrite:
                         stats['istnieje'] += 1  
                         continue
-                    
-                    image_data = pobierz_obraz(link)
-                    
-                    if convert_webp and original_extension == '.webp':
-                        image_data = convert_webp_to_png(image_data)
-                        stats['konwersje'] += 1
                     
                     downloaded_files[filename] = image_data
                     stats['sukces'] += 1
@@ -344,11 +467,9 @@ if uploaded_file is not None:
                         st.error(error_msg)
                     stats['blad'] += 1
             
-            # Zakończenie
             progress_bar.progress(1.0)
             status_text.text("✅ Pobieranie zakończone!")
             
-            # Zapisz wyniki w session_state
             missing_eans = None
             if ean_filter_set:
                 missing_eans = ean_filter_set - found_eans
@@ -359,7 +480,8 @@ if uploaded_file is not None:
                 'pdf_eans': pdf_eans,
                 'downloaded_files': downloaded_files,
                 'missing_eans': missing_eans,
-                'ean_filter_set': ean_filter_set
+                'ean_filter_set': ean_filter_set,
+                'transparency_processed': transparency_processed
             }
         
         # Wyświetl wyniki
@@ -371,8 +493,8 @@ if uploaded_file is not None:
             downloaded_files = results['downloaded_files']
             missing_eans = results['missing_eans']
             ean_filter_set = results['ean_filter_set']
+            transparency_processed = results.get('transparency_processed', [])
             
-            # Raport końcowy
             st.markdown("---")
             st.markdown("## 📊 Raport końcowy")
             
@@ -380,23 +502,37 @@ if uploaded_file is not None:
             cols_data = []
             if stats['sukces'] > 0:
                 cols_data.append(("✅ Pobrane", stats['sukces']))
+            if stats.get('transparency_fixed', 0) > 0:
+                cols_data.append(("🎨 Dodano tło", stats['transparency_fixed']))
+            if stats['konwersje'] > 0:
+                cols_data.append(("🔄 Konwersje WebP", stats['konwersje']))
             if stats['blad'] > 0:
                 cols_data.append(("❌ Błędy", stats['blad']))
             if stats['istnieje'] > 0:
                 cols_data.append(("📁 Już istnieje", stats['istnieje']))
-            if stats['konwersje'] > 0:
-                cols_data.append(("🔄 Konwersje WebP", stats['konwersje']))
             if ean_filter_set and stats['nieznalezione_ean'] > 0:
                 cols_data.append(("🔍 Poza filtrem", stats['nieznalezione_ean']))
             if stats['pdf_pominięte'] > 0:
                 cols_data.append(("📄 Pliki PDF", stats['pdf_pominięte']))
-            if stats['puste_wiersze'] > 0:
-                cols_data.append(("⬜ Puste wiersze", stats['puste_wiersze']))
             
             if cols_data:
                 cols = st.columns(len(cols_data))
                 for i, (label, value) in enumerate(cols_data):
                     cols[i].metric(label, value)
+            
+            # Lista obrazów z dodanym tłem
+            if transparency_processed and handle_transparency:
+                with st.expander(f"🎨 Obrazy z dodanym tłem ({len(transparency_processed)})"):
+                    st.info(f"Dodano {bg_option.lower() if 'bg_option' in locals() else 'białe'} tło do obrazów z przezroczystością")
+                    trans_text = '\n'.join(transparency_processed[:100])
+                    st.text_area(
+                        "Lista kodów EAN:",
+                        value=trans_text,
+                        height=min(150, len(transparency_processed) * 20),
+                        help="Obrazy tych produktów miały przezroczyste tło"
+                    )
+                    if len(transparency_processed) > 100:
+                        st.text(f"... i {len(transparency_processed) - 100} więcej")
             
             # Błędy
             if errors_log:
@@ -448,7 +584,6 @@ if uploaded_file is not None:
                     type="primary"
                 )
                 
-                # Lista plików
                 with st.expander(f"📋 Lista pobranych plików ({stats['sukces']})"):
                     for i, filename in enumerate(sorted(downloaded_files.keys()), 1):
                         st.text(f"{i}. {filename}")
@@ -460,13 +595,11 @@ if uploaded_file is not None:
         st.exception(e)
 
 else:
-    # Ekran powitalny
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
         st.info("📤 Wgraj plik Excel, aby rozpocząć")
         
-        # Przykładowa struktura pliku
         with st.expander("📋 Wymagana struktura pliku Excel"):
             example_df = pd.DataFrame({
                 'EAN': ['5901234567890', '5907654321098', '9788374959216'],
