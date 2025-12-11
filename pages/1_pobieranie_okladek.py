@@ -61,8 +61,8 @@ def has_transparency(image):
             return True
     return False
 
-def add_white_background(image_bytes, background_color=(255, 255, 255)):
-    """Dodaje tło do obrazu z przezroczystością"""
+def add_white_background(image_bytes):
+    """Dodaje białe tło do obrazu z przezroczystością"""
     try:
         image = Image.open(io.BytesIO(image_bytes))
         
@@ -79,7 +79,7 @@ def add_white_background(image_bytes, background_color=(255, 255, 255)):
                 image = image.convert('RGBA')
         
         # Utwórz białe tło
-        background = Image.new('RGBA', image.size, background_color + (255,))
+        background = Image.new('RGBA', image.size, (255, 255, 255, 255))
         
         # Złącz obraz z tłem
         background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
@@ -98,7 +98,7 @@ def add_white_background(image_bytes, background_color=(255, 255, 255)):
         # W razie błędu zwróć oryginalny obraz
         return image_bytes
 
-def convert_webp_to_png(image_bytes, remove_transparency=False, background_color=(255, 255, 255)):
+def convert_webp_to_png(image_bytes, remove_transparency=False):
     """Konwertuje obraz WebP na PNG z opcjonalnym usunięciem przezroczystości"""
     try:
         image = Image.open(io.BytesIO(image_bytes))
@@ -108,7 +108,7 @@ def convert_webp_to_png(image_bytes, remove_transparency=False, background_color
             if image.mode != 'RGBA':
                 image = image.convert('RGBA')
             
-            background = Image.new('RGB', image.size, background_color)
+            background = Image.new('RGB', image.size, (255, 255, 255))
             background.paste(image, mask=image.split()[-1])
             image = background
         elif image.mode in ('RGBA', 'LA'):
@@ -160,11 +160,6 @@ def parse_ean_list(ean_text):
     
     return set(ean_list)
 
-def get_color_from_hex(hex_color):
-    """Konwertuje kolor HEX na tuple RGB"""
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
 # Inicjalizacja session_state
 if 'download_results' not in st.session_state:
     st.session_state.download_results = None
@@ -177,41 +172,14 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ Ustawienia")
     
-    # Sekcja przezroczystości
-    st.markdown("### 🎨 Obsługa przezroczystości")
-    
+    # Sekcja przezroczystości - uproszczona
     handle_transparency = st.checkbox(
-        "Dodaj tło do przezroczystych obrazów",
+        "Dodaj białe tło do przezroczystych obrazów",
         value=True,
-        help="Automatycznie wykrywa obrazy z przezroczystym tłem i dodaje wybrane tło"
+        help="Automatycznie wykrywa obrazy z przezroczystym tłem i dodaje białe tło"
     )
     
-    if handle_transparency:
-        bg_option = st.radio(
-            "Kolor tła:",
-            ["Białe", "Czarne", "Szare", "Własny"],
-            index=0
-        )
-        
-        if bg_option == "Białe":
-            background_color = (255, 255, 255)
-        elif bg_option == "Czarne":
-            background_color = (0, 0, 0)
-        elif bg_option == "Szare":
-            background_color = (128, 128, 128)
-        else:
-            custom_color = st.color_picker(
-                "Wybierz kolor:",
-                value="#FFFFFF"
-            )
-            background_color = get_color_from_hex(custom_color)
-            st.info(f"RGB: {background_color}")
-    
-    st.markdown("---")
-    
     # Sekcja konwersji WebP
-    st.markdown("### 🔄 Konwersja formatów")
-    
     convert_webp = st.checkbox(
         "Konwertuj .webp na .png",
         value=True,
@@ -219,9 +187,6 @@ with st.sidebar:
     )
     
     # Sekcja plików
-    st.markdown("---")
-    st.markdown("### 📁 Opcje plików")
-    
     overwrite = st.checkbox(
         "Nadpisuj istniejące pliki",
         value=False,
@@ -229,21 +194,18 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.markdown("### ℹ️ Informacje")
+    st.markdown("### 📋 Instrukcja")
+    st.markdown("""
+    1. Wgraj plik Excel
+    2. Wybierz kolumny z danymi
+    3. Opcjonalnie: wklej listę EAN
+    4. Kliknij 'Pobierz okładki'
+    5. Pobierz archiwum ZIP
+    """)
     
-    with st.expander("📋 Funkcje"):
-        st.markdown("""
-        **Obsługa przezroczystości:**
-        - ✅ Automatyczne wykrywanie
-        - ✅ Dodawanie tła
-        - ✅ Wybór koloru tła
-        - ✅ Zachowanie jakości
-        
-        **Pomijane:**
-        - ❌ Puste wiersze
-        - ❌ Pliki PDF
-        - ❌ Nieprawidłowe linki
-        """)
+    st.markdown("---")
+    st.markdown("### ℹ️ Informacje")
+    st.info("Aplikacja automatycznie pomija puste wiersze, pliki PDF i nieprawidłowe linki.")
     
     if st.session_state.download_results:
         st.markdown("---")
@@ -352,7 +314,7 @@ if uploaded_file is not None:
                 'blad': 0,
                 'istnieje': 0,  
                 'konwersje': 0,
-                'transparency_fixed': 0,  # Nowa statystyka
+                'transparency_fixed': 0,  # Licznik obrazów z dodanym tłem
                 'nieznalezione_ean': 0,
                 'pdf_pominięte': 0,
                 'puste_wiersze': 0
@@ -424,7 +386,7 @@ if uploaded_file is not None:
                     # Obsługa przezroczystości (przed konwersją WebP)
                     if handle_transparency and extension != '.webp':
                         original_size = len(image_data)
-                        processed_data = add_white_background(image_data, background_color)
+                        processed_data = add_white_background(image_data)
                         
                         # Sprawdź czy obraz został przetworzony
                         if len(processed_data) != original_size or processed_data != image_data:
@@ -434,21 +396,22 @@ if uploaded_file is not None:
                     
                     # Konwersja WebP
                     if convert_webp and original_extension == '.webp':
+                        # Sprawdź czy WebP ma przezroczystość przed konwersją
+                        if handle_transparency:
+                            temp_img = Image.open(io.BytesIO(image_data))
+                            had_transparency = has_transparency(temp_img)
+                        
                         image_data = convert_webp_to_png(
                             image_data, 
-                            remove_transparency=handle_transparency,
-                            background_color=background_color
+                            remove_transparency=handle_transparency
                         )
                         extension = '.png'
                         stats['konwersje'] += 1
                         
                         # Jeśli WebP miał przezroczystość i została usunięta
-                        if handle_transparency:
-                            # Sprawdź czy obraz miał przezroczystość
-                            temp_img = Image.open(io.BytesIO(pobierz_obraz(link)))
-                            if has_transparency(temp_img):
-                                stats['transparency_fixed'] += 1
-                                transparency_processed.append(ean)
+                        if handle_transparency and had_transparency:
+                            stats['transparency_fixed'] += 1
+                            transparency_processed.append(ean)
                     
                     filename = f"{ean}{extension}"
                     
@@ -503,7 +466,7 @@ if uploaded_file is not None:
             if stats['sukces'] > 0:
                 cols_data.append(("✅ Pobrane", stats['sukces']))
             if stats.get('transparency_fixed', 0) > 0:
-                cols_data.append(("🎨 Dodano tło", stats['transparency_fixed']))
+                cols_data.append(("🎨 Dodano białe tło", stats['transparency_fixed']))
             if stats['konwersje'] > 0:
                 cols_data.append(("🔄 Konwersje WebP", stats['konwersje']))
             if stats['blad'] > 0:
@@ -522,8 +485,8 @@ if uploaded_file is not None:
             
             # Lista obrazów z dodanym tłem
             if transparency_processed and handle_transparency:
-                with st.expander(f"🎨 Obrazy z dodanym tłem ({len(transparency_processed)})"):
-                    st.info(f"Dodano {bg_option.lower() if 'bg_option' in locals() else 'białe'} tło do obrazów z przezroczystością")
+                with st.expander(f"🎨 Obrazy z dodanym białym tłem ({len(transparency_processed)})"):
+                    st.info("Wykryto i usunięto przezroczystość w poniższych obrazach")
                     trans_text = '\n'.join(transparency_processed[:100])
                     st.text_area(
                         "Lista kodów EAN:",
