@@ -164,7 +164,7 @@ if uploaded_files:
     # Przycisk konwersji
     st.markdown("---")
     
-    if st.button(f"🚀 KONWERTUJ DO {output_format}", type="primary", use_container_width=True):
+    if st.button(f"🚀 KONWERTUJ DO {output_format}", type="primary", idth="stretch"):
         converted_files = {}
         errors = []
         
@@ -243,7 +243,7 @@ if uploaded_files:
                     data=file_data,
                     file_name=filename,
                     mime=f"image/{output_format.lower()}",
-                    use_container_width=True,
+                    idth="stretch",
                     type="primary"
                 )
             else:
@@ -256,7 +256,7 @@ if uploaded_files:
                     data=zip_buffer,
                     file_name=zip_filename,
                     mime="application/zip",
-                    use_container_width=True,
+                    idth="stretch",
                     type="primary"
                 )
             

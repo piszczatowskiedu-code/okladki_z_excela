@@ -9,12 +9,16 @@ st.set_page_config(
 )
 
 # Definicja stron
-pages = [
-    st.Page("pages/home.py", title="Strona główna", icon="🏠", default=True),
-    st.Page("pages/1_pobieranie_okladek.py", title="Pobieranie okładek", icon="📥"),
-    st.Page("pages/2_zmiana_opisu_html.py", title="Konwerter HTML", icon="📝"),
-    st.Page("pages/3_konwerter_webp.py", title="Konwerter obrazów", icon="🖼️"),
-]
+pages = {
+        "": [
+            st.Page("pages/home.py", title="Strona główna", icon="🏠", default=True)
+        ],
+        "Narzędzia": [
+            st.Page("pages/1_pobieranie_okladek.py", title="Pobieranie okładek", icon="📥"),
+            st.Page("pages/2_zmiana_opisu_html.py", title="Konwerter HTML", icon="📝"),
+            st.Page("pages/3_konwerter_webp.py", title="Konwerter obrazów", icon="🖼️"),
+        ]
+}
 
 # Nawigacja
 pg = st.navigation(pages, position="top")

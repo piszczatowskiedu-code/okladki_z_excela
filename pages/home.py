@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Pierwszy rząd - 2 kolumny
-col1, col2 = st.columns(2)
+col1, col2, col3= st.columns(3)
 
 with col1:
     st.markdown("""
@@ -32,14 +32,14 @@ with col1:
     <p>Automatyczne pobieranie obrazów okładek produktów na podstawie linków z pliku Excel.</p>
     <ul>
         <li>✅ Wsparcie dla wielu formatów obrazów</li>
-        <li>✅ Konwersja WebP na PNG</li>
+        <li>✅ Konwersja WebP na PNG + Usuwanie przezroczystego tła</li>
         <li>✅ Filtrowanie po kodach EAN</li>
         <li>✅ Eksport do ZIP</li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚀 Otwórz narzędzie pobierania", key="btn_covers", type="primary"):
+    if st.button("Otwórz narzędzie pobierania", key="btn_covers", type="primary", icon="🚀", width="stretch"):
         st.switch_page("pages/1_pobieranie_okladek.py")
 
 with col2:
@@ -56,12 +56,8 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚀 Otwórz konwerter HTML", key="btn_html", type="primary"):
+    if st.button("Otwórz konwerter HTML", key="btn_html", type="primary", icon="🚀", width="stretch"):
         st.switch_page("pages/2_zmiana_opisu_html.py")
-
-# Drugi rząd
-st.markdown("---")
-col3, col4 = st.columns(2)
 
 with col3:
     st.markdown("""
@@ -77,37 +73,16 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🚀 Otwórz konwerter obrazów", key="btn_webp", type="primary"):
+    if st.button("Otwórz konwerter obrazów", key="btn_webp", type="primary", icon="🚀", width="stretch"):
         st.switch_page("pages/3_konwerter_webp.py")
 
 # Informacje dodatkowe
-st.markdown("---")
 with st.expander("ℹ️ Informacje o aplikacji"):
     st.markdown("""
-    ### Dostępne narzędzia:
-    
-    #### 📥 Pobieranie okładek:
-    - Automatyczne pobieranie obrazów z URL
-    - Konwersja formatów (WebP → PNG)
-    - Filtrowanie po kodach EAN
-    - Pomijanie plików PDF
-    - Raport z błędami i statystykami
-    
-    #### 📝 Konwerter HTML:
-    - Konwersja markdown na HTML
-    - Obsługa list i nagłówków
-    - Formatowanie tekstu (bold, italic)
-    - Zachowanie struktury dokumentu
-    
-    #### 🖼️ Konwerter WebP:
-    - Konwersja między popularnymi formatami obrazów
-    - Wsadowe przetwarzanie wielu plików
-    - Regulowana jakość kompresji
-    - Inteligentne pakowanie do ZIP
+    ### Tutaj dodać ewentualne informacje jeżeli będą potrzebne
     """)
 
 # Stopka
-st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #888;'>Made with ❤️ using Streamlit</div>",
     unsafe_allow_html=True
