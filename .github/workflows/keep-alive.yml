@@ -10,41 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Ping Streamlit App
+      - name: Ping with wget
         run: |
           echo "🚀 Streamlit Keep-Alive"
           echo "⏰ $(date '+%Y-%m-%d %H:%M:%S UTC')"
           echo ""
           
-          # Ping 1
-          echo "📡 Ping 1: Wake up..."
-          curl -sL --max-time 180 "${{ secrets.STREAMLIT_APP_URL }}?health=check" || true
-          echo ""
-          echo "Done."
+          URL="${{ secrets.STREAMLIT_APP_URL }}?health=check"
           
-          # Wait
+          echo "📡 Ping 1: Wake up (timeout 3 min)..."
+          wget -qO- --timeout=180 "$URL" 2>&1 || echo "(no response)"
           echo ""
-          echo "⏳ Waiting 10 seconds..."
+          
           sleep 10
           
-          # Ping 2
-          echo ""
           echo "📡 Ping 2: Verify..."
-          RESULT=$(curl -sL --max-time 30 "${{ secrets.STREAMLIT_APP_URL }}?health=check" || true)
-          echo "Response: $RESULT"
-          
-          # Check
+          RESULT=$(wget -qO- --timeout=30 "$URL" 2>&1) || RESULT="ERROR"
+          echo "Response: [$RESULT]"
           echo ""
+          
           if [ "$RESULT" = "OK" ]; then
             echo "✅ SUCCESS!"
           else
-            echo "⚠️ Response was: $RESULT"
+            echo "⚠️ Got: $RESULT"
+            
+            # Debug - sprawdź co zwraca główna strona
+            echo ""
+            echo "🔍 Debug - main page:"
+            wget -qO- --timeout=30 "${{ secrets.STREAMLIT_APP_URL }}" 2>&1 | head -5
           fi
-          
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 🌟 Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
-          echo "**Time:** $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check logs for details." >> $GITHUB_STEP_SUMMARY
