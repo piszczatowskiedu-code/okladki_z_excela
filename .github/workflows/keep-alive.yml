@@ -14,77 +14,95 @@ jobs:
       - name: Check Secret
         run: |
           if [ -z "${{ secrets.STREAMLIT_APP_URL }}" ]; then
-            echo "ERROR: STREAMLIT_APP_URL secret is not configured!"
+            echo "❌ ERROR: STREAMLIT_APP_URL secret is not configured!"
             echo "Please add it in Settings → Secrets and variables → Actions"
             exit 1
           else
-            echo "Secret STREAMLIT_APP_URL is configured"
+            echo "✅ Secret STREAMLIT_APP_URL is configured"
           fi
           
-      - name: Ping Streamlit App
+      - name: Ping Health Check Endpoint
         run: |
+          # Dodaj parametr health=check do URL
           APP_URL="${{ secrets.STREAMLIT_APP_URL }}"
+          HEALTH_URL="${APP_URL%/}/?health=check"
           
-          echo "Attempting to wake up Streamlit app..."
-          echo "Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "🚀 Streamlit Keep-Alive Service"
+          echo "================================"
+          echo "⏰ Time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "🎯 Target: $HEALTH_URL"
           echo ""
           
-          # Pierwszy ping - może trwać długo jeśli app śpi (timeout 90 sekund)
-          echo "First ping (wake-up call)..."
-          if curl -s -o /dev/null -w "HTTP Status: %{http_code} | Response Time: %{time_total}s\n" --max-time 90 "$APP_URL"; then
-            echo "First ping completed!"
+          # Pierwszy ping - budzenie aplikacji (może trwać długo)
+          echo "📡 First ping (wake-up call)..."
+          echo "   Timeout: 120 seconds (app may be sleeping)"
+          echo ""
+          
+          RESPONSE1=$(curl -s -w "\n%{http_code}|%{time_total}" --max-time 120 "$HEALTH_URL" 2>&1) || true
+          
+          BODY1=$(echo "$RESPONSE1" | head -n -1)
+          STATUS1=$(echo "$RESPONSE1" | tail -1 | cut -d'|' -f1)
+          TIME1=$(echo "$RESPONSE1" | tail -1 | cut -d'|' -f2)
+          
+          echo "   Response: $BODY1"
+          echo "   Status: $STATUS1"
+          echo "   Time: ${TIME1}s"
+          echo ""
+          
+          # Czekaj 15 sekund
+          echo "⏳ Waiting 15 seconds for full initialization..."
+          sleep 15
+          echo ""
+          
+          # Drugi ping - weryfikacja
+          echo "📡 Second ping (verification)..."
+          
+          RESPONSE2=$(curl -s -w "\n%{http_code}|%{time_total}" --max-time 30 "$HEALTH_URL" 2>&1) || true
+          
+          BODY2=$(echo "$RESPONSE2" | head -n -1)
+          STATUS2=$(echo "$RESPONSE2" | tail -1 | cut -d'|' -f1)
+          TIME2=$(echo "$RESPONSE2" | tail -1 | cut -d'|' -f2)
+          
+          echo "   Response: $BODY2"
+          echo "   Status: $STATUS2"
+          echo "   Time: ${TIME2}s"
+          echo ""
+          
+          # Ocena wyniku
+          echo "================================"
+          if [ "$STATUS2" = "200" ] && [ "$BODY2" = "OK" ]; then
+            echo "✅ SUCCESS! App is alive and responding correctly!"
+            echo "RESULT=success" >> $GITHUB_ENV
+          elif [ "$STATUS2" = "200" ]; then
+            echo "✅ SUCCESS! App is responding (Status 200)"
+            echo "RESULT=success" >> $GITHUB_ENV
+          elif [ "$STATUS1" = "200" ]; then
+            echo "⚠️ PARTIAL SUCCESS - First ping worked, second had issues"
+            echo "RESULT=partial" >> $GITHUB_ENV
           else
-            echo "First ping failed or timed out (app might be sleeping)"
-          fi
-          
-          # Czekaj 10 sekund
-          echo ""
-          echo "Waiting 10 seconds for app to fully wake up..."
-          sleep 10
-          
-          # Drugi ping - powinien być szybszy
-          echo ""
-          echo "Second ping (verification)..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$APP_URL" || echo "000")
-          
-          echo "HTTP Status Code: $HTTP_CODE"
-          
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "SUCCESS! App is active and responding!"
-          elif [ "$HTTP_CODE" -eq 301 ] || [ "$HTTP_CODE" -eq 302 ] || [ "$HTTP_CODE" -eq 307 ] || [ "$HTTP_CODE" -eq 308 ]; then
-            echo "SUCCESS! App is redirecting (normal for Streamlit)"
-          elif [ "$HTTP_CODE" -eq 000 ]; then
-            echo "Connection timeout or failed"
-          else
-            echo "Unexpected status code: $HTTP_CODE"
-          fi
-          
-          # Trzeci ping - opcjonalny, dla pewności
-          echo ""
-          echo "Third ping (final check)..."
-          sleep 5
-          
-          FINAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$APP_URL" || echo "000")
-          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" --max-time 20 "$APP_URL" || echo "N/A")
-          
-          echo "Final Status Code: $FINAL_CODE"
-          echo "Response Time: ${RESPONSE_TIME}s"
-          
-          if [ "$FINAL_CODE" -eq 200 ] || [ "$FINAL_CODE" -eq 301 ] || [ "$FINAL_CODE" -eq 302 ]; then
-            echo ""
-            echo "App successfully awakened and responding!"
-          else
-            echo ""
-            echo "App may need more time to wake up, but that's normal."
-            echo "It will be fully active for users now."
+            echo "❌ WARNING: App may need manual check"
+            echo "   Status codes: $STATUS1 → $STATUS2"
+            echo "RESULT=failed" >> $GITHUB_ENV
           fi
           
       - name: Create Summary Report
         if: always()
         run: |
-          echo "## Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
+          echo "## 🌟 Streamlit Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Ping Results:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** Job completed" >> $GITHUB_STEP_SUMMARY
-          echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target:** Streamlit App" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ⏰ Time | $(date '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📍 Endpoint | \`?health=check\` |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$RESULT" = "success" ]; then
+            echo "| ✅ Status | **Alive & Healthy** |" >> $GITHUB_STEP_SUMMARY
+          elif [ "$RESULT" = "partial" ]; then
+            echo "| ⚠️ Status | **Partial Success** |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| ❌ Status | **Needs Attention** |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Triggered by: ${{ github.event_name }}*" >> $GITHUB_STEP_SUMMARY
