@@ -1,46 +1,82 @@
-name: Direct Curl Test
+name: Keep Streamlit App Alive
 
 on:
+  schedule:
+    - cron: '30 5 * * 1-5'
   workflow_dispatch:
 
 jobs:
-  test:
+  ping-app:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Test Various Curl Commands
+      - name: Ping Streamlit App
+        id: ping
         run: |
           APP_URL="${{ secrets.STREAMLIT_APP_URL }}"
+          HEALTH_URL="${APP_URL}?health=check"
           
-          echo "🔍 CURL TESTS"
-          echo "============="
+          echo "🚀 Streamlit Keep-Alive"
+          echo "⏰ $(date '+%Y-%m-%d %H:%M:%S UTC')"
           echo ""
           
-          # Test 1: Najprostszy curl
-          echo "TEST 1: Basic curl (no options)"
-          curl "$APP_URL" && echo "OK" || echo "Exit code: $?"
-          echo ""
+          # Ping 1: Wake up
+          echo "📡 Ping 1: Wake up..."
+          START=$(date +%s)
           
-          # Test 2: Z -L
-          echo "TEST 2: With -L (follow redirects)"
-          curl -L "$APP_URL" 2>&1 | head -5 && echo "OK" || echo "Exit code: $?"
-          echo ""
+          RESPONSE1=$(curl -sL --max-time 180 "$HEALTH_URL" 2>&1)
           
-          # Test 3: Tylko status code
-          echo "TEST 3: Status code only"
-          curl -s -o /dev/null -w "%{http_code}" "$APP_URL" && echo "" || echo "Exit code: $?"
-          echo ""
+          END=$(date +%s)
+          TIME1=$((END - START))
           
-          # Test 4: Verbose
-          echo "TEST 4: Verbose (first 20 lines)"
-          curl -v "$APP_URL" 2>&1 | head -20
-          echo ""
+          echo "   Response: $RESPONSE1"
+          echo "   Time: ${TIME1}s"
           
-          # Test 5: Bez secret - bezpośredni URL
-          echo "TEST 5: Direct URL test"
-          curl -sL -o /dev/null -w "HTTP: %{http_code}\n" "https://streamlit.io" || echo "Exit code: $?"
-          echo ""
+          echo "PING1_RESPONSE=$RESPONSE1" >> $GITHUB_OUTPUT
+          echo "PING1_TIME=$TIME1" >> $GITHUB_OUTPUT
           
-          # Test 6: wget zamiast curl
-          echo "TEST 6: Using wget instead"
-          wget -q -O - "$APP_URL" 2>&1 | head -5 && echo "OK" || echo "Exit code: $?"
+          # Wait
+          echo ""
+          echo "⏳ Waiting 10 seconds..."
+          sleep 10
+          
+          # Ping 2: Verify
+          echo ""
+          echo "📡 Ping 2: Verify..."
+          
+          RESPONSE2=$(curl -sL --max-time 30 "$HEALTH_URL" 2>&1)
+          
+          echo "   Response: $RESPONSE2"
+          
+          echo "PING2_RESPONSE=$RESPONSE2" >> $GITHUB_OUTPUT
+          
+          # Result
+          echo ""
+          echo "════════════════════════════"
+          if [ "$RESPONSE2" = "OK" ]; then
+            echo "✅ SUCCESS! App is alive!"
+            echo "RESULT=success" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Unexpected response: $RESPONSE2"
+            echo "RESULT=check" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🌟 Streamlit Keep-Alive Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.ping.outputs.RESULT }}" = "success" ]; then
+            echo "### ✅ Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Status: CHECK NEEDED" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Ping | Response | Time |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 1️⃣ Wake | \`${{ steps.ping.outputs.PING1_RESPONSE }}\` | ${{ steps.ping.outputs.PING1_TIME }}s |" >> $GITHUB_STEP_SUMMARY
+          echo "| 2️⃣ Verify | \`${{ steps.ping.outputs.PING2_RESPONSE }}\` | - |" >> $GITHUB_STEP_SUMMARY
