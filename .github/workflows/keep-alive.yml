@@ -1,75 +1,46 @@
-name: Debug URL Secret
+name: Direct Curl Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  debug:
+  test:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Check URL Format
+      - name: Test Various Curl Commands
         run: |
           APP_URL="${{ secrets.STREAMLIT_APP_URL }}"
           
-          echo "🔍 URL DIAGNOSTIC"
-          echo "================="
+          echo "🔍 CURL TESTS"
+          echo "============="
           echo ""
           
-          # Długość
-          echo "Length: ${#APP_URL} characters"
-          
-          # Czy pusty
-          if [ -z "$APP_URL" ]; then
-            echo "❌ URL is EMPTY!"
-            exit 1
-          fi
-          
-          # Pokaż pierwszy i ostatni znak (bezpiecznie)
-          echo "First char: ${APP_URL:0:1}"
-          echo "Last char: ${APP_URL: -1}"
-          
-          # Sprawdź prefix
-          if [[ "$APP_URL" == https://* ]]; then
-            echo "✅ Starts with https://"
-          elif [[ "$APP_URL" == http://* ]]; then
-            echo "⚠️ Starts with http:// (should be https://)"
-          else
-            echo "❌ Does NOT start with http:// or https://"
-            echo "First 10 chars: ${APP_URL:0:10}"
-          fi
-          
-          # Sprawdź czy zawiera streamlit.app
-          if [[ "$APP_URL" == *".streamlit.app"* ]]; then
-            echo "✅ Contains .streamlit.app"
-          else
-            echo "⚠️ Does NOT contain .streamlit.app"
-          fi
-          
-          # Sprawdź nielegalne znaki
-          if [[ "$APP_URL" == *" "* ]]; then
-            echo "❌ Contains SPACES!"
-          fi
-          
-          if [[ "$APP_URL" == *$'\n'* ]]; then
-            echo "❌ Contains NEWLINE!"
-          fi
-          
-          if [[ "$APP_URL" == *$'\r'* ]]; then
-            echo "❌ Contains CARRIAGE RETURN!"
-          fi
-          
-          # Wyodrębnij domenę
-          DOMAIN=$(echo "$APP_URL" | sed -e 's|https://||' -e 's|http://||' -e 's|/.*||')
+          # Test 1: Najprostszy curl
+          echo "TEST 1: Basic curl (no options)"
+          curl "$APP_URL" && echo "OK" || echo "Exit code: $?"
           echo ""
-          echo "Extracted domain: $DOMAIN"
           
-          # Test DNS
+          # Test 2: Z -L
+          echo "TEST 2: With -L (follow redirects)"
+          curl -L "$APP_URL" 2>&1 | head -5 && echo "OK" || echo "Exit code: $?"
           echo ""
-          echo "🌐 DNS Test:"
-          nslookup "$DOMAIN" 2>&1 | head -10
           
-          # Test curl
+          # Test 3: Tylko status code
+          echo "TEST 3: Status code only"
+          curl -s -o /dev/null -w "%{http_code}" "$APP_URL" && echo "" || echo "Exit code: $?"
           echo ""
-          echo "🌐 Simple curl test:"
-          curl -sL -o /dev/null -w "HTTP: %{http_code}\n" --max-time 30 "$APP_URL" || echo "Curl failed with exit code: $?"
+          
+          # Test 4: Verbose
+          echo "TEST 4: Verbose (first 20 lines)"
+          curl -v "$APP_URL" 2>&1 | head -20
+          echo ""
+          
+          # Test 5: Bez secret - bezpośredni URL
+          echo "TEST 5: Direct URL test"
+          curl -sL -o /dev/null -w "HTTP: %{http_code}\n" "https://streamlit.io" || echo "Exit code: $?"
+          echo ""
+          
+          # Test 6: wget zamiast curl
+          echo "TEST 6: Using wget instead"
+          wget -q -O - "$APP_URL" 2>&1 | head -5 && echo "OK" || echo "Exit code: $?"
